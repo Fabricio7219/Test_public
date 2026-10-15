@@ -1,0 +1,99 @@
+name: Testes automatizados
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Regressão diária às 09h (horário de Brasília) para detectar mudanças nos sistemas testados
+    - cron: "0 12 * * *"
+  workflow_dispatch:
+    inputs:
+      grupo:
+        description: "Tag a executar (vazio = todos)"
+        required: false
+        default: ""
+        type: choice
+        options: ["", smoke, regressao, api, web, contrato]
+
+concurrency:
+  group: testes-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api:
+    name: API (REST Assured)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+
+      - name: Executar testes de API
+        run: |
+          GRUPO="${{ github.event.inputs.grupo }}"
+          if [ "$GRUPO" = "web" ]; then echo "Execução só de web, API ignorada"; exit 0; fi
+          if [ -z "$GRUPO" ] || [ "$GRUPO" = "api" ]; then FILTRO="api"; else FILTRO="api & $GRUPO"; fi
+          mvn -B test -Dtest='com/fabricioaraujo/api/**/*Test' -Dgroups="$FILTRO"
+
+      - name: Publicar relatório JUnit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: relatorio-api
+          path: |
+            target/surefire-reports/
+            target/allure-results/
+
+  web:
+    name: Web (Selenium + Cucumber)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+
+      - uses: browser-actions/setup-chrome@v1
+
+      - name: Executar cenários BDD
+        run: |
+          GRUPO="${{ github.event.inputs.grupo }}"
+          if [ "$GRUPO" = "api" ] || [ "$GRUPO" = "contrato" ]; then echo "Execução só de API, web ignorada"; exit 0; fi
+          if [ -n "$GRUPO" ] && [ "$GRUPO" != "web" ]; then
+            mvn -B test -Dtest=RunCucumberTest -Dgroups="$GRUPO" -Dheadless=true
+          else
+            mvn -B test -Dtest=RunCucumberTest -Dheadless=true
+          fi
+
+      - name: Publicar relatório Cucumber
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: relatorio-web
+          path: |
+            target/cucumber-report.html
+            target/surefire-reports/
+            target/allure-results/
+
+  resumo:
+    name: Resumo da execução
+    needs: [api, web]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Status dos jobs
+        run: |
+          echo "## Resultado" >> $GITHUB_STEP_SUMMARY
+          echo "| Suite | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "| --- | --- |" >> $GITHUB_STEP_SUMMARY
+          echo "| API | ${{ needs.api.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Web | ${{ needs.web.result }} |" >> $GITHUB_STEP_SUMMARY
