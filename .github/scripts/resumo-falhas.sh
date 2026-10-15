@@ -8,10 +8,9 @@ LOG="build.log"
 
 [ -f "$LOG" ] || { echo "::error title=$SUITE::build.log não encontrado"; exit 0; }
 
-FALHAS=$(grep -E "^\[ERROR\] (Failures|Errors|Tests run:|  |/|COMPILATION|Failed to execute)|expected|Expected|but was|Exception" "$LOG" \
-  | grep -v "^\[ERROR\] *$" | head -40)
-
-[ -z "$FALHAS" ] && FALHAS=$(grep "^\[ERROR\]" "$LOG" | head -40)
+FALHAS=$(grep -E "^\[ERROR\]|expected|Expected|but was" "$LOG" \
+  | grep -vE "^\[ERROR\] *$|Help 1|re-run Maven|full stack trace|For more information|cwiki.apache" \
+  | sed 's/\t/  /g' | head -40)
 
 {
   echo "## Falhas — $SUITE"
