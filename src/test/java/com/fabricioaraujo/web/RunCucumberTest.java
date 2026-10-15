@@ -17,6 +17,6 @@ import static io.cucumber.junit.platform.engine.Constants.PLUGIN_PROPERTY_NAME;
 @SelectClasspathResource("features")
 @ConfigurationParameter(key = GLUE_PROPERTY_NAME, value = "com.fabricioaraujo.web.steps")
 @ConfigurationParameter(key = PLUGIN_PROPERTY_NAME,
-        value = "pretty, html:target/cucumber-report.html, io.qameta.allure.cucumber7jvm.AllureCucumber7Jvm")
+        value = "pretty, html:target/cucumber-report.html, json:target/cucumber-report.json")
 public class RunCucumberTest {
 }

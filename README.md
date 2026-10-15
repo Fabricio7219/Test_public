@@ -64,7 +64,7 @@ mvn test -Dtest=RunCucumberTest -Dheadless=false
 Relatórios gerados em `target/`:
 - `cucumber-report.html` — cenários BDD
 - `surefire-reports/` — resultado JUnit
-- `allure-results/` — gerar com `allure serve target/allure-results`
+- `allure-results/` — testes de API, gerar com `allure serve target/allure-results`
 
 ## Pipeline
 
