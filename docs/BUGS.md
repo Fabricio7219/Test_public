@@ -27,15 +27,23 @@ Os testes validam a regra de negócio e deixam o desvio documentado aqui, em vez
 | Impacto | Status semanticamente incorreto, pode confundir integrações e monitoramento |
 | Teste relacionado | `BookingCrudTest.excluiReserva` |
 
-## BUG-003 — Criação de reserva recusa Content-Type com charset
+## BUG-003 — Criação de reserva recusa header Accept com múltiplos tipos
 
 | Campo | Detalhe |
 | --- | --- |
 | Severidade | Média |
 | Endpoint | `POST /booking` |
-| Passos | Enviar uma reserva válida com header `Content-Type: application/json; charset=UTF-8` |
-| Resultado esperado | `200 OK` com a reserva criada (o parâmetro charset é válido pela RFC 8259) |
+| Passos | Enviar uma reserva válida com `Accept: application/json, application/javascript, text/javascript, text/json` |
+| Resultado esperado | `200 OK` com a reserva criada, já que `application/json` está entre os tipos aceitos |
 | Resultado obtido | `418 I'm a Teapot` |
-| Impacto | Clientes HTTP que incluem charset por padrão (como o REST Assured) não conseguem criar reservas |
-| Contorno no projeto | `ApiConfig` desliga o charset automático do REST Assured |
-| Como foi encontrado | Primeira execução do pipeline: todos os testes que criam reserva falharam com 418, enquanto `/auth` e `/ping` passaram |
+| Impacto | Clientes que enviam vários tipos no Accept (o padrão do REST Assured com `ContentType.JSON`) não conseguem criar reservas |
+| Contorno no projeto | `ApiConfig` envia `Accept: application/json` explicitamente |
+
+**Como foi investigado:** na primeira execução do pipeline, todos os testes que criam reserva falharam com 418, enquanto `/auth` e `/ping` passaram. A primeira hipótese (charset no Content-Type) foi descartada. Um diagnóstico com curl no próprio runner testou as variações de header isoladamente:
+
+| Content-Type | Accept | Status |
+| --- | --- | --- |
+| `application/json` | `application/json` | 200 |
+| `application/json; charset=UTF-8` | `application/json` | 200 |
+| `application/json` | (ausente) | 200 |
+| `application/json` | `application/json, application/javascript, text/javascript, text/json` | **418** |
