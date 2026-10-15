@@ -15,7 +15,7 @@ on:
         required: false
         default: ""
         type: choice
-        options: ["", smoke, regressao, api, web, contrato]
+        options: ["", smoke, regressao, api, web, contrato, performance]
 
 concurrency:
   group: testes-${{ github.ref }}
@@ -38,7 +38,7 @@ jobs:
         run: |
           set -o pipefail
           GRUPO="${{ github.event.inputs.grupo }}"
-          if [ "$GRUPO" = "web" ]; then echo "Execução só de web, API ignorada"; exit 0; fi
+          if [ "$GRUPO" = "web" ] || [ "$GRUPO" = "performance" ]; then echo "API ignorada nesta execução"; exit 0; fi
           if [ -z "$GRUPO" ] || [ "$GRUPO" = "api" ]; then FILTRO="api"; else FILTRO="api & $GRUPO"; fi
           mvn -B test -Dtest='com/fabricioaraujo/api/**/*Test' -Dgroups="$FILTRO" | tee build.log
 
@@ -75,7 +75,7 @@ jobs:
         run: |
           set -o pipefail
           GRUPO="${{ github.event.inputs.grupo }}"
-          if [ "$GRUPO" = "api" ] || [ "$GRUPO" = "contrato" ]; then echo "Execução só de API, web ignorada"; exit 0; fi
+          if [ "$GRUPO" = "api" ] || [ "$GRUPO" = "contrato" ] || [ "$GRUPO" = "performance" ]; then echo "Web ignorada nesta execução"; exit 0; fi
           FILTRO=""
           if [ -n "$GRUPO" ] && [ "$GRUPO" != "web" ]; then FILTRO="-Dgroups=$GRUPO"; fi
           mvn -B test -Dtest=RunCucumberTest $FILTRO -Dheadless=true | tee build.log
@@ -96,9 +96,36 @@ jobs:
             target/surefire-reports/
             target/allure-results/
 
+  performance:
+    name: Performance (k6)
+    runs-on: ubuntu-latest
+    if: github.event.inputs.grupo == '' || github.event.inputs.grupo == 'performance'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Executar teste de carga
+        run: |
+          docker run --rm -u "$(id -u):$(id -g)" -v "$PWD:/work" -w /work \
+            grafana/k6:latest run perf/booking-load.js
+
+      - name: Publicar resumo
+        if: always()
+        run: |
+          if [ -f perf-summary.md ]; then cat perf-summary.md >> "$GITHUB_STEP_SUMMARY"; fi
+
+      - name: Publicar relatório
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: relatorio-performance
+          if-no-files-found: ignore
+          path: |
+            perf-summary.md
+            perf-summary.json
+
   resumo:
     name: Resumo da execução
-    needs: [api, web]
+    needs: [api, web, performance]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -109,3 +136,4 @@ jobs:
           echo "| --- | --- |" >> $GITHUB_STEP_SUMMARY
           echo "| API | ${{ needs.api.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Web | ${{ needs.web.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Performance | ${{ needs.performance.result }} |" >> $GITHUB_STEP_SUMMARY
